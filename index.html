@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Airbnb Listing Review</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f7f7f7;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        h1 {
+            text-align: center;
+            color: #ff5a5f;
+            margin: 0;
+        }
+        /* NEW: Styles for the Add button */
+        .add-listing-btn {
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 10px 15px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .add-listing-btn:hover {
+            background-color: #218838;
+        }
+        .loading-spinner {
+            text-align: center;
+            padding: 50px;
+            font-size: 1.2em;
+        }
+        .listing-card {
+            background-color: #ffffff;
+            border: 1px solid #dddddd;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            opacity: 0;
+            transform: translateY(20px);
+            animation: fadeIn 0.5s forwards;
+            transition: background-color 0.3s;
+        }
+        .listing-card.booked {
+            border-left: 5px solid #28a745;
+            background-color: #f8f9fa;
+        }
+        .booked-label {
+            color: #28a745;
+            font-size: 0.7em;
+            font-weight: 700;
+            vertical-align: middle;
+            margin-left: 8px;
+        }
+        @keyframes fadeIn {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .listing-header {
+            border-bottom: 1px solid #eee;
+            padding-bottom: 15px;
+            margin-bottom: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 15px;
+        }
+        .listing-title {
+            font-size: 1.5em;
+            font-weight: 600;
+            margin: 0;
+        }
+        .listing-link {
+            font-size: 0.9em;
+            color: #007a87;
+            text-decoration: none;
+        }
+        .listing-link:hover {
+            text-decoration: underline;
+        }
+        .listing-cost {
+            font-size: 1.2em;
+            font-weight: 700;
+            color: #484848;
+            margin-top: 5px;
+        }
+        .combined-overall-rating {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background-color: #ff5a5f;
+            color: white;
+            border-radius: 8px;
+            padding: 5px 10px;
+            text-align: center;
+        }
+        .combined-score {
+            font-size: 1.6em;
+            font-weight: 700;
+            line-height: 1;
+        }
+        .combined-label {
+            font-size: 0.6em;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .reviews-section {
+            display: flex;
+            justify-content: space-between;
+            gap: 20px;
+        }
+        .review-column {
+            width: 48%;
+        }
+        .review-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .review-header h3 {
+            margin: 0;
+            color: #ff5a5f;
+        }
+        .clear-btn {
+            background: none;
+            border: 1px solid #ccc;
+            color: #888;
+            font-size: 0.75em;
+            padding: 2px 8px;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .clear-btn:hover {
+            background-color: #e74c3c;
+            color: white;
+            border-color: #e74c3c;
+        }
+        .review-column textarea {
+            width: 100%;
+            box-sizing: border-box;
+            height: 100px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            padding: 8px;
+            font-size: 1em;
+            resize: vertical;
+            margin-top: 10px;
+        }
+        .star {
+            font-size: 1.5em;
+            color: #ddd;
+            cursor: pointer;
+            padding: 0 1px;
+        }
+        .star:hover,
+        .star.filled {
+            color: #f8b400;
+        }
+        .ratings-container {
+            margin-top: 15px;
+            border-top: 1px solid #f0f0f0;
+            padding-top: 15px;
+        }
+        .rating-category-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+        .rating-label {
+            font-size: 0.9em;
+            font-weight: 500;
+        }
+        .overall-rating {
+            margin-top: 15px;
+            font-size: 1.1em;
+            font-weight: bold;
+            text-align: right;
+            color: #333;
+        }
+        /* NEW: Styles for the Flaggyness tooltip */
+        .tooltip-icon {
+            display: inline-block;
+            position: relative;
+            margin-left: 5px;
+            background-color: #ccc;
+            color: white;
+            border-radius: 50%;
+            width: 16px;
+            height: 16px;
+            font-size: 12px;
+            line-height: 16px;
+            text-align: center;
+            cursor: help;
+        }
+        .tooltip-text {
+            visibility: hidden;
+            width: 160px;
+            background-color: #555;
+            color: #fff;
+            text-align: center;
+            border-radius: 6px;
+            padding: 5px;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%;
+            left: 50%;
+            margin-left: -80px;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .tooltip-icon:hover .tooltip-text {
+            visibility: visible;
+            opacity: 1;
+        }
+        /* NEW: Styles for the Add Listing Modal */
+        .modal {
+            display: none; /* Hidden by default */
+            position: fixed;
+            z-index: 100;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.5);
+            justify-content: center;
+            align-items: center;
+        }
+        .modal.is-visible {
+            display: flex;
+        }
+        .modal-content {
+            background-color: #fefefe;
+            padding: 20px 30px;
+            border: 1px solid #888;
+            border-radius: 12px;
+            width: 80%;
+            max-width: 500px;
+        }
+        .modal-content h2 {
+            margin-top: 0;
+        }
+        .modal-form label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        .modal-form input {
+            width: 95%;
+            padding: 8px;
+            margin-bottom: 15px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+        }
+        .modal-actions {
+            text-align: right;
+        }
+        .modal-actions button {
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        .modal-save-btn {
+            background-color: #28a745;
+            color: white;
+        }
+        .modal-cancel-btn {
+            background-color: #ccc;
+            margin-right: 10px;
+        }
+
+        @media (max-width: 600px) {
+            .reviews-section {
+                flex-direction: column;
+            }
+            .review-column {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div class="page-header">
+            <h1>Airbnb Options Review</h1>
+            <button class="add-listing-btn" id="add-listing-btn">+ Add Listing</button>
+        </div>
+        <div id="listings-container">
+             <div class="loading-spinner">✨ Loading reviews...</div>
+        </div>
+    </div>
+
+    <div id="add-listing-modal" class="modal">
+        <div class="modal-content">
+            <h2>Add a New Listing</h2>
+            <form id="add-listing-form" class="modal-form">
+                <label for="listing-url">Listing URL</label>
+                <input type="url" id="listing-url" required>
+
+                <label for="listing-title">Listing Title</label>
+                <input type="text" id="listing-title" required>
+                
+                <label for="listing-cost">Total Cost (e.g., $1234)</label>
+                <input type="text" id="listing-cost" required>
+                
+                <div class="modal-actions">
+                    <button type="button" class="modal-cancel-btn" id="modal-cancel-btn">Cancel</button>
+                    <button type="submit" class="modal-save-btn">Save Listing</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+
+    <script>
+    const FIREBASE_DATABASE_URL = 'https://airbnb-picker-default-rtdb.firebaseio.com/listings.json';
+    const initialListings = [
+        { id: 1, url: 'https://www.airbnb.com/rooms/1229404693236047622', title: 'Desert Retreat | Cowboy Pool • Spa • Stargazing', cost: '$708', booked: true },
+        { id: 2, url: 'https://www.airbnb.com/rooms/579628663173827290', title: 'Kinetic House By Homestead Modern', cost: '$779' },
+        { id: 3, url: 'https://www.airbnb.com/rooms/47469289', title: 'Mid Century Retro Oasis @ The House of Kindness', cost: '$846' },
+        { id: 4, url: 'https://www.airbnb.com/rooms/48049056', title: 'The Rockstar By The Cohost Company', cost: '$834' },
+        { id: 5, url: 'https://www.airbnb.com/rooms/1230874509409595733', title: 'Sage Moon By The Cohost Company', cost: '$749' },
+        { id: 6, url: 'https://www.airbnb.com/rooms/44569859', title: 'Mountain Views on 10-Acres, Hot Tub · The Outpost', cost: '$788' },
+        { id: 7, url: 'https://www.airbnb.com/rooms/1064071487115095144', title: 'Privacy, Epic Views, Spa · Pipes Canyon Homestead', cost: '$620' }
+    ];
+
+    const listingsContainer = document.getElementById('listings-container');
+    let appData = [];
+    const ratingCategories = ['Location', 'Amenities', 'Flaggyness'];
+
+    document.addEventListener('DOMContentLoaded', () => {
+        loadData();
+        setupModal();
+    });
+
+    async function loadData() {
+        try {
+            const response = await fetch(FIREBASE_DATABASE_URL);
+            const savedData = await response.json();
+            if (savedData && Array.isArray(savedData) && savedData.length > 0) {
+                appData = savedData;
+            } else {
+                appData = initialListings.map(listing => ({
+                    ...listing,
+                    alex_ratings: { location: 0, amenities: 0, flaggyness: 0 },
+                    alex_comment: '',
+                    elkin_ratings: { location: 0, amenities: 0, flaggyness: 0 },
+                    elkin_comment: ''
+                }));
+                await saveData();
+            }
+            renderListings();
+        } catch (error) {
+            console.error("Could not load data from Firebase:", error);
+            listingsContainer.innerHTML = `<div style="color:red; text-align:center;">Error loading data.</div>`;
+        }
+    }
+
+    async function saveData() {
+        try {
+            await fetch(FIREBASE_DATABASE_URL, {
+                method: 'PUT',
+                body: JSON.stringify(appData),
+                headers: { 'Content-Type': 'application/json' }
+            });
+        } catch (error) {
+            console.error("Could not save data to Firebase:", error);
+            alert("Error: Could not save changes.");
+        }
+    }
+
+    function renderListings() {
+        listingsContainer.innerHTML = '';
+        appData.sort((a, b) => a.id - b.id).forEach((listing, index) => {
+            const card = document.createElement('div');
+            card.className = 'listing-card';
+            card.dataset.id = listing.id;
+            card.style.animationDelay = `${index * 0.05}s`;
+
+            const bookedLabel = listing.booked ? '<span class="booked-label">(BOOKED)</span>' : '';
+            if (listing.booked) {
+                card.classList.add('booked');
+            }
+            
+            const alexOverall = parseFloat(calculateOverall(listing.alex_ratings));
+            const elkinOverall = parseFloat(calculateOverall(listing.elkin_ratings));
+            const validScores = [];
+            if (!isNaN(alexOverall)) validScores.push(alexOverall);
+            if (!isNaN(elkinOverall)) validScores.push(elkinOverall);
+            
+            let combinedScoreHtml = '';
+            if (validScores.length > 0) {
+                const combinedAvg = validScores.reduce((a, b) => a + b, 0) / validScores.length;
+                combinedScoreHtml = `
+                    <div class="combined-overall-rating">
+                        <span class="combined-score">${combinedAvg.toFixed(1)}</span>
+                        <span class="combined-label">Combined</span>
+                    </div>`;
+            }
+
+            card.innerHTML = `
+                <div class="listing-header">
+                    <div>
+                        <h2 class="listing-title">${listing.title} ${bookedLabel}</h2>
+                        <a href="${listing.url}" target="_blank" class="listing-link">View on Airbnb</a>
+                        <div class="listing-cost">Total Est. Cost: ${listing.cost}</div>
+                    </div>
+                    ${combinedScoreHtml}
+                </div>
+                <div class="reviews-section">
+                    ${createReviewColumn('Alex', listing)}
+                    ${createReviewColumn('Elkin', listing)}
+                </div>`;
+            listingsContainer.appendChild(card);
+        });
+        addEventListeners();
+    }
+    
+    function calculateOverall(ratings) {
+        if(!ratings) return 'N/A';
+        const ratedValues = Object.values(ratings).filter(value => value > 0);
+        if (ratedValues.length === 0) return 'N/A';
+        const sum = ratedValues.reduce((total, val) => total + val, 0);
+        return (sum / ratedValues.length).toFixed(1);
+    }
+
+    function createReviewColumn(person, listing) {
+        const personKey = person.toLowerCase();
+        const ratings = listing[`${personKey}_ratings`] || { location: 0, amenities: 0, flaggyness: 0 };
+        const comment = listing[`${personKey}_comment`] || '';
+        
+        let ratingsHtml = '';
+        ratingCategories.forEach(category => {
+            const categoryKey = category.toLowerCase();
+            const currentRating = ratings[categoryKey] || 0;
+            let starsHtml = '';
+            for (let i = 1; i <= 5; i++) {
+                starsHtml += `<span class="star ${i <= currentRating ? 'filled' : ''}" data-value="${i}" data-person="${personKey}" data-category="${categoryKey}">&#9733;</span>`;
+            }
+
+            /* NEW: Add tooltip for Flaggyness category */
+            let labelHtml = category;
+            if (category === 'Flaggyness') {
+                labelHtml += `
+                    <span class="tooltip-icon">?
+                        <span class="tooltip-text">1 star = Most "flaggy"<br>5 stars = Least "flaggy"</span>
+                    </span>`;
+            }
+
+            ratingsHtml += `
+                <div class="rating-category-row">
+                    <span class="rating-label">${labelHtml}</span>
+                    <div class="rating-stars">${starsHtml}</div>
+                </div>`;
+        });
+
+        const overallScore = calculateOverall(ratings);
+
+        return `
+            <div class="review-column">
+                <div class="review-header">
+                    <h3>${person}'s Review</h3>
+                    <button class="clear-btn" data-person="${personKey}" title="Clear ${person}'s review">Clear</button>
+                </div>
+                <div class="ratings-container">${ratingsHtml}</div>
+                <div class="overall-rating">Overall: ${overallScore} / 5</div>
+                <textarea data-person="${personKey}" placeholder="Your comments...">${comment}</textarea>
+            </div>`;
+    }
+
+    function addEventListeners() {
+        const debounce = (func, delay) => {
+            let timeout;
+            return function(...args) {
+                clearTimeout(timeout);
+                timeout = setTimeout(() => func.apply(this, args), delay);
+            };
+        };
+        const debouncedSave = debounce(saveData, 500);
+
+        document.querySelectorAll('textarea').forEach(textarea => {
+            textarea.addEventListener('input', (e) => {
+                const listingId = e.target.closest('.listing-card').dataset.id;
+                const person = e.target.dataset.person;
+                const listing = appData.find(l => l.id == listingId);
+                listing[`${person}_comment`] = e.target.value;
+                debouncedSave();
+            });
+        });
+
+        document.querySelectorAll('.star').forEach(star => {
+            star.addEventListener('click', (e) => {
+                const listingId = e.target.closest('.listing-card').dataset.id;
+                const person = e.target.dataset.person;
+                const category = e.target.dataset.category;
+                const value = parseInt(e.target.dataset.value);
+                const listing = appData.find(l => l.id == listingId);
+                const personRatings = listing[`${person}_ratings`];
+                
+                if (personRatings[category] === value) {
+                    personRatings[category] = 0;
+                } else {
+                    personRatings[category] = value;
+                }
+                renderListings();
+                saveData();
+            });
+        });
+
+        document.querySelectorAll('.clear-btn').forEach(button => {
+            button.addEventListener('click', (e) => {
+                if (confirm("Are you sure you want to clear this review?")) {
+                    const listingId = e.target.closest('.listing-card').dataset.id;
+                    const person = e.target.dataset.person;
+                    const listing = appData.find(l => l.id == listingId);
+                    listing[`${person}_comment`] = '';
+                    listing[`${person}_ratings`] = { location: 0, amenities: 0, flaggyness: 0 };
+                    renderListings();
+                    saveData();
+                }
+            });
+        });
+    }
+
+    /* NEW: All logic for the Add Listing modal */
+    function setupModal() {
+        const modal = document.getElementById('add-listing-modal');
+        const addBtn = document.getElementById('add-listing-btn');
+        const cancelBtn = document.getElementById('modal-cancel-btn');
+        const form = document.getElementById('add-listing-form');
+
+        addBtn.onclick = () => {
+            modal.classList.add('is-visible');
+        }
+        cancelBtn.onclick = () => {
+            modal.classList.remove('is-visible');
+        }
+        window.onclick = (event) => {
+            if (event.target == modal) {
+                modal.classList.remove('is-visible');
+            }
+        }
+        form.onsubmit = async (event) => {
+            event.preventDefault();
+            const newListing = {
+                id: Math.max(...appData.map(l => l.id), 0) + 1,
+                url: document.getElementById('listing-url').value,
+                title: document.getElementById('listing-title').value,
+                cost: document.getElementById('listing-cost').value,
+                booked: false,
+                alex_ratings: { location: 0, amenities: 0, flaggyness: 0 },
+                alex_comment: '',
+                elkin_ratings: { location: 0, amenities: 0, flaggyness: 0 },
+                elkin_comment: ''
+            };
+            appData.push(newListing);
+            modal.classList.remove('is-visible');
+            form.reset();
+            renderListings();
+            await saveData();
+        }
+    }
+    </script>
+</body>
+</html>
