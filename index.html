@@ -352,19 +352,13 @@
         setupModal();
     });
 
-    /* MODIFIED: This function has new, more robust logic to prevent data loss. */
     async function loadData() {
         try {
             const response = await fetch(`${FIREBASE_DB_URL}listings.json`);
             const savedData = await response.json();
-
-            // Check if Firebase returned data in any form (it returns null if empty)
             if (savedData) {
-                // Firebase returns arrays with missing keys as objects. Convert back to a proper array.
-                // Also filter out any null values that can result from deletions.
                 appData = Array.isArray(savedData) ? savedData.filter(i => i) : Object.values(savedData);
             } else {
-                // This block now only runs if the database is truly empty.
                 appData = initialListings.map(listing => ({
                     ...listing,
                     alex_ratings: { location: 0, amenities: 0, flaggyness: 0 },
@@ -372,7 +366,6 @@
                     elkin_ratings: { location: 0, amenities: 0, flaggyness: 0 },
                     elkin_comment: ''
                 }));
-                // Initialize the database with the default listings.
                 await fetch(`${FIREBASE_DB_URL}listings.json`, { method: 'PUT', body: JSON.stringify(appData) });
             }
             renderListings();
@@ -382,15 +375,20 @@
         }
     }
 
-    async function updateFirebase(path, data) {
+    /* NEW: Simplified save function. It saves the entire listing object that was changed. */
+    async function saveListing(listingId) {
+        const index = appData.findIndex(l => l && l.id == listingId);
+        if (index === -1) return;
+
+        const listingToSave = appData[index];
         try {
-            await fetch(`${FIREBASE_DB_URL}${path}.json`, {
-                method: 'PATCH',
-                body: JSON.stringify(data),
+            await fetch(`${FIREBASE_DB_URL}listings/${index}.json`, {
+                method: 'PUT', // PUT at a specific index replaces just that item.
+                body: JSON.stringify(listingToSave),
                 headers: { 'Content-Type': 'application/json' }
             });
         } catch (error) {
-            console.error("Could not update data:", error);
+            console.error("Could not save data:", error);
             alert("Error: Could not save changes.");
         }
     }
@@ -497,7 +495,7 @@
                 timeout = setTimeout(() => func.apply(this, args), delay);
             };
         };
-        const debouncedUpdate = debounce(updateFirebase, 500);
+        const debouncedSave = debounce(saveListing, 500);
 
         document.querySelectorAll('textarea').forEach(textarea => {
             textarea.addEventListener('input', (e) => {
@@ -506,25 +504,24 @@
                 if (index === -1) return;
                 const person = e.target.dataset.person;
                 appData[index][`${person}_comment`] = e.target.value;
-                debouncedUpdate(`listings/${index}/${person}_comment`, e.target.value);
+                debouncedSave(listingId);
             });
         });
 
         document.querySelectorAll('.star').forEach(star => {
             star.addEventListener('click', (e) => {
                 const listingId = e.target.closest('.listing-card').dataset.id;
-                const index = appData.findIndex(l => l && l.id == listingId);
-                if (index === -1) return;
                 const person = e.target.dataset.person;
                 const category = e.target.dataset.category;
                 const value = parseInt(e.target.dataset.value);
+                const index = appData.findIndex(l => l && l.id == listingId);
+                if (index === -1) return;
                 const personRatings = appData[index][`${person}_ratings`];
                 
-                const newValue = personRatings[category] === value ? 0 : value;
-                personRatings[category] = newValue;
-
+                personRatings[category] = personRatings[category] === value ? 0 : value;
+                
                 renderListings();
-                updateFirebase(`listings/${index}/${person}_ratings/${category}`, newValue);
+                saveListing(listingId);
             });
         });
 
@@ -532,19 +529,15 @@
             button.addEventListener('click', (e) => {
                 if (confirm("Are you sure you want to clear this review?")) {
                     const listingId = e.target.closest('.listing-card').dataset.id;
+                    const person = e.target.dataset.person;
                     const index = appData.findIndex(l => l && l.id == listingId);
                     if (index === -1) return;
-                    const person = e.target.dataset.person;
-                    const defaultRatings = { location: 0, amenities: 0, flaggyness: 0 };
-                    
-                    appData[index][`${person}_comment`] = '';
-                    appData[index][`${person}_ratings`] = defaultRatings;
 
+                    appData[index][`${person}_comment`] = '';
+                    appData[index][`${person}_ratings`] = { location: 0, amenities: 0, flaggyness: 0 };
+                    
                     renderListings();
-                    updateFirebase(`listings/${index}`, { 
-                        [`${person}_comment`]: '', 
-                        [`${person}_ratings`]: defaultRatings 
-                    });
+                    saveListing(listingId);
                 }
             });
         });
@@ -572,12 +565,11 @@
                 elkin_ratings: { location: 0, amenities: 0, flaggyness: 0 },
                 elkin_comment: ''
             };
-            const newIndex = appData.length;
             appData.push(newListing);
             modal.classList.remove('is-visible');
             form.reset();
             renderListings();
-            await updateFirebase(`listings/${newIndex}`, newListing);
+            await saveListing(newId);
         }
     }
     </script>
