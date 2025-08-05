@@ -352,14 +352,19 @@
         setupModal();
     });
 
+    /* MODIFIED: This function has new, more robust logic to prevent data loss. */
     async function loadData() {
         try {
             const response = await fetch(`${FIREBASE_DB_URL}listings.json`);
-            let savedData = await response.json();
-            if (savedData && Array.isArray(savedData) && savedData.length > 0) {
-                // Firebase may return a sparse array as an object, so we convert it back
-                appData = Object.values(savedData);
+            const savedData = await response.json();
+
+            // Check if Firebase returned data in any form (it returns null if empty)
+            if (savedData) {
+                // Firebase returns arrays with missing keys as objects. Convert back to a proper array.
+                // Also filter out any null values that can result from deletions.
+                appData = Array.isArray(savedData) ? savedData.filter(i => i) : Object.values(savedData);
             } else {
+                // This block now only runs if the database is truly empty.
                 appData = initialListings.map(listing => ({
                     ...listing,
                     alex_ratings: { location: 0, amenities: 0, flaggyness: 0 },
@@ -367,7 +372,7 @@
                     elkin_ratings: { location: 0, amenities: 0, flaggyness: 0 },
                     elkin_comment: ''
                 }));
-                // Using PUT here is fine for the very first initialization
+                // Initialize the database with the default listings.
                 await fetch(`${FIREBASE_DB_URL}listings.json`, { method: 'PUT', body: JSON.stringify(appData) });
             }
             renderListings();
@@ -377,11 +382,10 @@
         }
     }
 
-    /* NEW: Function to update specific fields in Firebase without overwriting everything */
     async function updateFirebase(path, data) {
         try {
             await fetch(`${FIREBASE_DB_URL}${path}.json`, {
-                method: 'PATCH', // PATCH merges data, PUT replaces it
+                method: 'PATCH',
                 body: JSON.stringify(data),
                 headers: { 'Content-Type': 'application/json' }
             });
@@ -493,13 +497,13 @@
                 timeout = setTimeout(() => func.apply(this, args), delay);
             };
         };
-        /* MODIFIED: Debouncing the new updateFirebase function */
         const debouncedUpdate = debounce(updateFirebase, 500);
 
         document.querySelectorAll('textarea').forEach(textarea => {
             textarea.addEventListener('input', (e) => {
                 const listingId = e.target.closest('.listing-card').dataset.id;
-                const index = appData.findIndex(l => l.id == listingId);
+                const index = appData.findIndex(l => l && l.id == listingId);
+                if (index === -1) return;
                 const person = e.target.dataset.person;
                 appData[index][`${person}_comment`] = e.target.value;
                 debouncedUpdate(`listings/${index}/${person}_comment`, e.target.value);
@@ -509,7 +513,8 @@
         document.querySelectorAll('.star').forEach(star => {
             star.addEventListener('click', (e) => {
                 const listingId = e.target.closest('.listing-card').dataset.id;
-                const index = appData.findIndex(l => l.id == listingId);
+                const index = appData.findIndex(l => l && l.id == listingId);
+                if (index === -1) return;
                 const person = e.target.dataset.person;
                 const category = e.target.dataset.category;
                 const value = parseInt(e.target.dataset.value);
@@ -527,7 +532,8 @@
             button.addEventListener('click', (e) => {
                 if (confirm("Are you sure you want to clear this review?")) {
                     const listingId = e.target.closest('.listing-card').dataset.id;
-                    const index = appData.findIndex(l => l.id == listingId);
+                    const index = appData.findIndex(l => l && l.id == listingId);
+                    if (index === -1) return;
                     const person = e.target.dataset.person;
                     const defaultRatings = { location: 0, amenities: 0, flaggyness: 0 };
                     
@@ -554,7 +560,7 @@
         window.onclick = (event) => { if (event.target == modal) { modal.classList.remove('is-visible'); } }
         form.onsubmit = async (event) => {
             event.preventDefault();
-            const newId = Math.max(...appData.map(l => l.id), 0) + 1;
+            const newId = Math.max(0, ...appData.map(l => l ? l.id : 0)) + 1;
             const newListing = {
                 id: newId,
                 url: document.getElementById('listing-url').value,
@@ -566,12 +572,12 @@
                 elkin_ratings: { location: 0, amenities: 0, flaggyness: 0 },
                 elkin_comment: ''
             };
+            const newIndex = appData.length;
             appData.push(newListing);
             modal.classList.remove('is-visible');
             form.reset();
             renderListings();
-            // Use PUT here to add the new object to the array by its index
-            await fetch(`${FIREBASE_DB_URL}listings/${appData.length - 1}.json`, { method: 'PUT', body: JSON.stringify(newListing) });
+            await updateFirebase(`listings/${newIndex}`, newListing);
         }
     }
     </script>
