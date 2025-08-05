@@ -27,7 +27,6 @@
             color: #ff5a5f;
             margin: 0;
         }
-        /* NEW: Styles for the Add button */
         .add-listing-btn {
             background-color: #28a745;
             color: white;
@@ -201,7 +200,6 @@
             text-align: right;
             color: #333;
         }
-        /* NEW: Styles for the Flaggyness tooltip */
         .tooltip-icon {
             display: inline-block;
             position: relative;
@@ -236,9 +234,8 @@
             visibility: visible;
             opacity: 1;
         }
-        /* NEW: Styles for the Add Listing Modal */
         .modal {
-            display: none; /* Hidden by default */
+            display: none;
             position: fixed;
             z-index: 100;
             left: 0;
@@ -294,7 +291,6 @@
             background-color: #ccc;
             margin-right: 10px;
         }
-
         @media (max-width: 600px) {
             .reviews-section {
                 flex-direction: column;
@@ -323,13 +319,10 @@
             <form id="add-listing-form" class="modal-form">
                 <label for="listing-url">Listing URL</label>
                 <input type="url" id="listing-url" required>
-
                 <label for="listing-title">Listing Title</label>
                 <input type="text" id="listing-title" required>
-                
                 <label for="listing-cost">Total Cost (e.g., $1234)</label>
                 <input type="text" id="listing-cost" required>
-                
                 <div class="modal-actions">
                     <button type="button" class="modal-cancel-btn" id="modal-cancel-btn">Cancel</button>
                     <button type="submit" class="modal-save-btn">Save Listing</button>
@@ -338,9 +331,8 @@
         </div>
     </div>
 
-
     <script>
-    const FIREBASE_DATABASE_URL = 'https://airbnb-picker-default-rtdb.firebaseio.com/listings.json';
+    const FIREBASE_DB_URL = 'https://airbnb-picker-default-rtdb.firebaseio.com/';
     const initialListings = [
         { id: 1, url: 'https://www.airbnb.com/rooms/1229404693236047622', title: 'Desert Retreat | Cowboy Pool • Spa • Stargazing', cost: '$708', booked: true },
         { id: 2, url: 'https://www.airbnb.com/rooms/579628663173827290', title: 'Kinetic House By Homestead Modern', cost: '$779' },
@@ -362,10 +354,11 @@
 
     async function loadData() {
         try {
-            const response = await fetch(FIREBASE_DATABASE_URL);
-            const savedData = await response.json();
+            const response = await fetch(`${FIREBASE_DB_URL}listings.json`);
+            let savedData = await response.json();
             if (savedData && Array.isArray(savedData) && savedData.length > 0) {
-                appData = savedData;
+                // Firebase may return a sparse array as an object, so we convert it back
+                appData = Object.values(savedData);
             } else {
                 appData = initialListings.map(listing => ({
                     ...listing,
@@ -374,7 +367,8 @@
                     elkin_ratings: { location: 0, amenities: 0, flaggyness: 0 },
                     elkin_comment: ''
                 }));
-                await saveData();
+                // Using PUT here is fine for the very first initialization
+                await fetch(`${FIREBASE_DB_URL}listings.json`, { method: 'PUT', body: JSON.stringify(appData) });
             }
             renderListings();
         } catch (error) {
@@ -383,15 +377,16 @@
         }
     }
 
-    async function saveData() {
+    /* NEW: Function to update specific fields in Firebase without overwriting everything */
+    async function updateFirebase(path, data) {
         try {
-            await fetch(FIREBASE_DATABASE_URL, {
-                method: 'PUT',
-                body: JSON.stringify(appData),
+            await fetch(`${FIREBASE_DB_URL}${path}.json`, {
+                method: 'PATCH', // PATCH merges data, PUT replaces it
+                body: JSON.stringify(data),
                 headers: { 'Content-Type': 'application/json' }
             });
         } catch (error) {
-            console.error("Could not save data to Firebase:", error);
+            console.error("Could not update data:", error);
             alert("Error: Could not save changes.");
         }
     }
@@ -464,25 +459,20 @@
             for (let i = 1; i <= 5; i++) {
                 starsHtml += `<span class="star ${i <= currentRating ? 'filled' : ''}" data-value="${i}" data-person="${personKey}" data-category="${categoryKey}">&#9733;</span>`;
             }
-
-            /* NEW: Add tooltip for Flaggyness category */
             let labelHtml = category;
             if (category === 'Flaggyness') {
                 labelHtml += `
                     <span class="tooltip-icon">?
-                        <span class="tooltip-text">1 star = Most "flaggy"<br>5 stars = Least "flaggy"</span>
+                        <span class="tooltip-text">1 star = Most "red flags"<br>5 stars = Least "red flags"</span>
                     </span>`;
             }
-
             ratingsHtml += `
                 <div class="rating-category-row">
                     <span class="rating-label">${labelHtml}</span>
                     <div class="rating-stars">${starsHtml}</div>
                 </div>`;
         });
-
         const overallScore = calculateOverall(ratings);
-
         return `
             <div class="review-column">
                 <div class="review-header">
@@ -503,34 +493,33 @@
                 timeout = setTimeout(() => func.apply(this, args), delay);
             };
         };
-        const debouncedSave = debounce(saveData, 500);
+        /* MODIFIED: Debouncing the new updateFirebase function */
+        const debouncedUpdate = debounce(updateFirebase, 500);
 
         document.querySelectorAll('textarea').forEach(textarea => {
             textarea.addEventListener('input', (e) => {
                 const listingId = e.target.closest('.listing-card').dataset.id;
+                const index = appData.findIndex(l => l.id == listingId);
                 const person = e.target.dataset.person;
-                const listing = appData.find(l => l.id == listingId);
-                listing[`${person}_comment`] = e.target.value;
-                debouncedSave();
+                appData[index][`${person}_comment`] = e.target.value;
+                debouncedUpdate(`listings/${index}/${person}_comment`, e.target.value);
             });
         });
 
         document.querySelectorAll('.star').forEach(star => {
             star.addEventListener('click', (e) => {
                 const listingId = e.target.closest('.listing-card').dataset.id;
+                const index = appData.findIndex(l => l.id == listingId);
                 const person = e.target.dataset.person;
                 const category = e.target.dataset.category;
                 const value = parseInt(e.target.dataset.value);
-                const listing = appData.find(l => l.id == listingId);
-                const personRatings = listing[`${person}_ratings`];
+                const personRatings = appData[index][`${person}_ratings`];
                 
-                if (personRatings[category] === value) {
-                    personRatings[category] = 0;
-                } else {
-                    personRatings[category] = value;
-                }
+                const newValue = personRatings[category] === value ? 0 : value;
+                personRatings[category] = newValue;
+
                 renderListings();
-                saveData();
+                updateFirebase(`listings/${index}/${person}_ratings/${category}`, newValue);
             });
         });
 
@@ -538,39 +527,36 @@
             button.addEventListener('click', (e) => {
                 if (confirm("Are you sure you want to clear this review?")) {
                     const listingId = e.target.closest('.listing-card').dataset.id;
+                    const index = appData.findIndex(l => l.id == listingId);
                     const person = e.target.dataset.person;
-                    const listing = appData.find(l => l.id == listingId);
-                    listing[`${person}_comment`] = '';
-                    listing[`${person}_ratings`] = { location: 0, amenities: 0, flaggyness: 0 };
+                    const defaultRatings = { location: 0, amenities: 0, flaggyness: 0 };
+                    
+                    appData[index][`${person}_comment`] = '';
+                    appData[index][`${person}_ratings`] = defaultRatings;
+
                     renderListings();
-                    saveData();
+                    updateFirebase(`listings/${index}`, { 
+                        [`${person}_comment`]: '', 
+                        [`${person}_ratings`]: defaultRatings 
+                    });
                 }
             });
         });
     }
 
-    /* NEW: All logic for the Add Listing modal */
     function setupModal() {
         const modal = document.getElementById('add-listing-modal');
         const addBtn = document.getElementById('add-listing-btn');
         const cancelBtn = document.getElementById('modal-cancel-btn');
         const form = document.getElementById('add-listing-form');
-
-        addBtn.onclick = () => {
-            modal.classList.add('is-visible');
-        }
-        cancelBtn.onclick = () => {
-            modal.classList.remove('is-visible');
-        }
-        window.onclick = (event) => {
-            if (event.target == modal) {
-                modal.classList.remove('is-visible');
-            }
-        }
+        addBtn.onclick = () => { modal.classList.add('is-visible'); }
+        cancelBtn.onclick = () => { modal.classList.remove('is-visible'); }
+        window.onclick = (event) => { if (event.target == modal) { modal.classList.remove('is-visible'); } }
         form.onsubmit = async (event) => {
             event.preventDefault();
+            const newId = Math.max(...appData.map(l => l.id), 0) + 1;
             const newListing = {
-                id: Math.max(...appData.map(l => l.id), 0) + 1,
+                id: newId,
                 url: document.getElementById('listing-url').value,
                 title: document.getElementById('listing-title').value,
                 cost: document.getElementById('listing-cost').value,
@@ -584,7 +570,8 @@
             modal.classList.remove('is-visible');
             form.reset();
             renderListings();
-            await saveData();
+            // Use PUT here to add the new object to the array by its index
+            await fetch(`${FIREBASE_DB_URL}listings/${appData.length - 1}.json`, { method: 'PUT', body: JSON.stringify(newListing) });
         }
     }
     </script>
